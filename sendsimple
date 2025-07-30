@@ -1,0 +1,71 @@
+#!/bin/bash
+
+read -p "Enter sender pubkey: " sender_pubkey
+read -p "Enter recipient pubkey: " recipient_pubkey
+read -p "Enter gift amount: " gift_amount
+read -p "Enter fee amount: " fee_amount
+
+echo
+echo "Sender:    $sender_pubkey"
+echo "Recipient: $recipient_pubkey"
+echo "Gift:      $gift_amount"
+echo "Fee:       $fee_amount"
+echo
+
+CSV_FILE="notes-$sender_pubkey.csv"
+
+echo "Exporting CSV for sender..."
+if [[ ! -f "$CSV_FILE" ]]; then
+  echo "❌ CSV file not found: $CSV_FILE"
+  exit 1
+fi
+echo "✅ CSV found: $CSV_FILE"
+
+MIN_TOTAL=$((gift_amount + fee_amount))
+
+echo "Finding suitable note with balance >= $MIN_TOTAL..."
+read -r note note_last <<< $(awk -F',' -v min="$MIN_TOTAL" '
+  $3 >= min { print $1, $5; exit }
+' "$CSV_FILE")
+
+if [[ -z "$note" || -z "$note_last" ]]; then
+  echo "❌ No suitable note found with amount >= $MIN_TOTAL"
+  exit 1
+fi
+
+names_str="[$note]"
+draft_file="./drafts/${note_last}.draft"
+
+echo "✅ Suitable note found: $note"
+echo "Draft file will be: $draft_file"
+
+echo "Making draft..."
+nockchain-wallet --nockchain-socket ~/nockchain/.socket/nockchain_npc.sock \
+  simple-spend \
+  --names "$names_str" \
+  --recipients "[1 $recipient_pubkey]" \
+  --gifts "$gift_amount" \
+  --fee "$fee_amount"
+
+if [[ ! -f "$draft_file" ]]; then
+  echo "❌ Draft file not found after simple-spend: $draft_file"
+  exit 1
+fi
+echo "✅ Draft created: $draft_file"
+
+echo "Signing TX..."
+nockchain-wallet --nockchain-socket ~/nockchain/.socket/nockchain_npc.sock sign-tx --draft "$draft_file"
+if [[ $? -ne 0 ]]; then
+  echo "❌ Signing TX failed"
+  exit 1
+fi
+echo "✅ TX signed"
+
+echo "Sending TX..."
+nockchain-wallet --nockchain-socket ~/nockchain/.socket/nockchain_npc.sock send-tx --draft "$draft_file"
+if [[ $? -ne 0 ]]; then
+  echo "❌ Sending TX failed"
+  exit 1
+fi
+
+echo "✅ TX sent successfully!"
