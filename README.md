@@ -85,30 +85,49 @@ Example
 
 📤 Enter Sender pubkey:
 <88-char sender pubkey>
+
 📥 Enter Recipient pubkey:
 <88-char recipient pubkey>
+
 🎁 Enter Gift amount:
 100
+
 💸 Enter Fee amount:
 1
 
 🔐 Sender:    <sender pubkey>
+
 📦 Recipient: <recipient pubkey>
+
 🎁 Gift:      100
+
 💸 Fee:       1
+
 ➕ Total:     101
 
 📁 Exporting CSV for sender...
+
 ✅ CSV found: notes-<sender_pubkey>.csv
+
 🔍 Finding suitable note with balance >= 101...
+
 ✅ Suitable note found:
+
    🔑 First:  <note_first>
+   
    🧾 Last:   <note_last>
+   
    💰 Amount: <note_amount>
+   
 
 🛠️  Making draft...
+
 ✅ Draft created: drafts/<note_last>.draft
+
 ✍️  Signing draft...
+
 ✅ Draft signed
+
 🚀 Sending transaction...
+
 ✅ Transaction sent successfully!
