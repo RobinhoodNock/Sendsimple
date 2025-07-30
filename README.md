@@ -15,6 +15,7 @@ The script prompts you to enter:
     Fee amount (positive integer).
 
 It validates the input lengths and formats to prevent errors later.
+
 2. Export Notes CSV
 
 Using the sender’s public key, the script calls the nockchain-wallet CLI to export a CSV file listing all the sender’s notes (unspent outputs).
