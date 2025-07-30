@@ -1,5 +1,5 @@
 
-This allows users to just input Sender / Recipient / Gift / Fee on Nockchain without needing to do additional steps to send
+This allows users to just input Sender / Recipient / Gift / Fee on Nockchain without needing to do additional steps to send Nock.
 
 How It Works: Step-by-Step
 1. Input Collection
