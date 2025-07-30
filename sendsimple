@@ -1,71 +1,108 @@
 #!/bin/bash
 
-read -p "Enter sender pubkey: " sender_pubkey
-read -p "Enter recipient pubkey: " recipient_pubkey
-read -p "Enter gift amount: " gift_amount
-read -p "Enter fee amount: " fee_amount
+set -euo pipefail
 
-echo
-echo "Sender:    $sender_pubkey"
-echo "Recipient: $recipient_pubkey"
-echo "Gift:      $gift_amount"
-echo "Fee:       $fee_amount"
-echo
+SOCKET=~/nockchain/.socket/nockchain_npc.sock
+DRAFTS_DIR=./drafts
 
-CSV_FILE="notes-$sender_pubkey.csv"
+mkdir -p "$DRAFTS_DIR"
 
-echo "Exporting CSV for sender..."
-if [[ ! -f "$CSV_FILE" ]]; then
-  echo "❌ CSV file not found: $CSV_FILE"
-  exit 1
-fi
-echo "✅ CSV found: $CSV_FILE"
+echo -e "📤 Enter \033[1;36mSender\033[0m pubkey:"
+read -r sender
+echo -e "📥 Enter \033[1;33mRecipient\033[0m pubkey:"
+read -r recipient
+echo -e "🎁 Enter \033[1;32mGift\033[0m amount:"
+read -r gift
+echo -e "💸 Enter \033[1;31mFee\033[0m amount:"
+read -r fee
 
-MIN_TOTAL=$((gift_amount + fee_amount))
+# Validate pubkeys length = 88 chars
+for key in "$sender" "$recipient"; do
+  if [ ${#key} -ne 132 ]; then
+    echo "❌ Error: Invalid pubkey length (${#key}). Must be exactly 132 characters."
+    exit 1
+  fi
+done
 
-echo "Finding suitable note with balance >= $MIN_TOTAL..."
-read -r note note_last <<< $(awk -F',' -v min="$MIN_TOTAL" '
-  $3 >= min { print $1, $5; exit }
-' "$CSV_FILE")
-
-if [[ -z "$note" || -z "$note_last" ]]; then
-  echo "❌ No suitable note found with amount >= $MIN_TOTAL"
+# Validate gift and fee are positive integers
+if ! [[ "$gift" =~ ^[0-9]+$ ]] || ! [[ "$fee" =~ ^[0-9]+$ ]]; then
+  echo "❌ Error: Gift and fee must be positive integers."
   exit 1
 fi
 
-names_str="[$note]"
-draft_file="./drafts/${note_last}.draft"
+total=$((gift + fee))
 
-echo "✅ Suitable note found: $note"
-echo "Draft file will be: $draft_file"
+echo
+echo "➕ Total:     $total"
+echo
 
-echo "Making draft..."
-nockchain-wallet --nockchain-socket ~/nockchain/.socket/nockchain_npc.sock \
+# Step 1: Export CSV
+echo "📁 Exporting CSV for sender..."
+nockchain-wallet --nockchain-socket "$SOCKET" \
+  list-notes-by-pubkey-csv --pubkey "$sender"
+
+csv_file="notes-${sender}.csv"
+if [ ! -f "$csv_file" ]; then
+  echo "❌ CSV file not found: $csv_file"
+  exit 1
+fi
+echo "✅ CSV found: $csv_file"
+
+# Step 2: Parse CSV to find suitable note
+echo "🔍 Finding suitable note with balance >= $total..."
+
+suitable_note=$(awk -F, -v min="$total" '
+  NR > 1 && $3 >= min {
+    print $1 "," $2 "," $3;
+    exit
+  }
+' "$csv_file")
+
+if [ -z "$suitable_note" ]; then
+  echo "❌ No suitable note found with assets >= $total."
+  exit 1
+fi
+
+IFS=',' read -r note_first note_last note_amt <<< "$suitable_note"
+
+echo "✅ Suitable note found:"
+echo "   🔑 First:  $note_first"
+echo "   🧾 Last:   $note_last"
+echo "   💰 Amount: $note_amt"
+echo
+
+# Step 3: Make draft using simple-spend (auto generates .draft)
+echo "🛠️  Making draft..."
+nockchain-wallet --nockchain-socket "$SOCKET" \
   simple-spend \
-  --names "$names_str" \
-  --recipients "[1 $recipient_pubkey]" \
-  --gifts "$gift_amount" \
-  --fee "$fee_amount"
+  --names "[${note_first} ${note_last}]" \
+  --recipients "[1 ${recipient}]" \
+  --gifts "$gift" \
+  --fee "$fee"
 
-if [[ ! -f "$draft_file" ]]; then
-  echo "❌ Draft file not found after simple-spend: $draft_file"
+draft_file="${DRAFTS_DIR}/${note_last}.draft"
+
+if [ ! -f "$draft_file" ]; then
+  echo "❌ Draft not found: $draft_file"
   exit 1
 fi
 echo "✅ Draft created: $draft_file"
 
-echo "Signing TX..."
-nockchain-wallet --nockchain-socket ~/nockchain/.socket/nockchain_npc.sock sign-tx --draft "$draft_file"
-if [[ $? -ne 0 ]]; then
-  echo "❌ Signing TX failed"
+# Step 4: Sign draft
+echo "✍️  Signing draft..."
+if ! nockchain-wallet --nockchain-socket "$SOCKET" sign-tx --draft "$draft_file"; then
+  echo "❌ Failed to sign draft"
   exit 1
 fi
-echo "✅ TX signed"
+echo "✅ Draft signed"
 
-echo "Sending TX..."
-nockchain-wallet --nockchain-socket ~/nockchain/.socket/nockchain_npc.sock send-tx --draft "$draft_file"
-if [[ $? -ne 0 ]]; then
-  echo "❌ Sending TX failed"
+# Step 5: Send transaction
+echo "🚀 Sending transaction..."
+if ! nockchain-wallet --nockchain-socket "$SOCKET" send-tx --draft "$draft_file"; then
+  echo "❌ Failed to send transaction"
   exit 1
 fi
+echo "✅ Transaction sent successfully!"
 
-echo "✅ TX sent successfully!"
+# Optional: Clean up draft file
+# rm -f "$draft_file"
