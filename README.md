@@ -95,13 +95,6 @@ Example
 💸 Enter Fee amount:
 1
 
-🔐 Sender:    <sender pubkey>
-
-📦 Recipient: <recipient pubkey>
-
-🎁 Gift:      100
-
-💸 Fee:       1
 
 ➕ Total:     101
 
